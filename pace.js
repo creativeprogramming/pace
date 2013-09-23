@@ -1,5 +1,5 @@
 (function() {
-  var AjaxMonitor, Bar, DocumentMonitor, ElementMonitor, ElementTracker, EventLagMonitor, Events, RequestIntercept, RequestTracker, SOURCE_KEYS, Scaler, animation, bar, cancelAnimation, cancelAnimationFrame, defaultOptions, extend, getFromDOM, handlePushState, init, intercept, now, options, requestAnimationFrame, result, runAnimation, scalers, sources, uniScaler, _XDomainRequest, _XMLHttpRequest, _pushState, _replaceState,
+  var AjaxMonitor, Bar, DocumentMonitor, ElementMonitor, ElementTracker, EventLagMonitor, Events, RequestIntercept, RequestTracker, SOURCE_KEYS, Scaler, animation, bar, cancelAnimation, cancelAnimationFrame, defaultOptions, extend, firstLoad, getFromDOM, handlePushState, init, intercept, now, options, requestAnimationFrame, result, runAnimation, scalers, sources, uniScaler, _XDomainRequest, _XMLHttpRequest, _pushState, _replaceState,
     __slice = [].slice,
     __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
@@ -11,11 +11,17 @@
     ghostTime: 250,
     maxProgressPerFrame: 10,
     easeFactor: 1.25,
+    startOnPageLoad: true,
     restartOnPushState: true,
+    restartOnBackboneRoute: true,
     elements: {
       checkInterval: 100,
       selectors: ['body']
-    }
+    },
+    eventLag: {
+      minSamples: 10
+    },
+    target: 'body'
   };
 
   now = function() {
@@ -116,14 +122,16 @@
     }
 
     Bar.prototype.getElement = function() {
+      var targetElement;
       if (this.el == null) {
         this.el = document.createElement('div');
         this.el.className = "pace pace-active";
         this.el.innerHTML = '<div class="pace-progress">\n  <div class="pace-progress-inner"></div>\n</div>\n<div class="pace-activity"></div>';
-        if (document.body.firstChild != null) {
-          document.body.insertBefore(this.el, document.body.firstChild);
+        targetElement = document.querySelector(options.target);
+        if (targetElement.firstChild != null) {
+          targetElement.insertBefore(this.el, targetElement.firstChild);
         } else {
-          document.body.appendChild(this.el);
+          targetElement.appendChild(this.el);
         }
       }
       return this.el;
@@ -148,7 +156,7 @@
 
     Bar.prototype.render = function() {
       var el, progressStr;
-      if (document.body == null) {
+      if (document.querySelector(options.target) == null) {
         return false;
       }
       el = this.getElement();
@@ -420,7 +428,7 @@
         diff = now() - last - 50;
         last = now();
         avg = avg + (diff - avg) / 15;
-        if (points++ > 20 && Math.abs(avg) < 3) {
+        if (points++ > options.eventLag.minSamples && Math.abs(avg) < 3) {
           avg = 0;
         }
         return _this.progress = 100 * (3 / (avg + 3));
@@ -509,6 +517,40 @@
       handlePushState();
       return _replaceState.apply(window.history, arguments);
     };
+  }
+
+  firstLoad = true;
+
+  if (options.restartOnBackboneRoute) {
+    setTimeout(function() {
+      if (window.Backbone == null) {
+        return;
+      }
+      return Backbone.history.on('route', function(router, name) {
+        var routeName, rule, _i, _len, _results;
+        if (!(rule = options.restartOnBackboneRoute)) {
+          return;
+        }
+        if (firstLoad) {
+          firstLoad = false;
+          return;
+        }
+        if (typeof rule === 'object') {
+          _results = [];
+          for (_i = 0, _len = rule.length; _i < _len; _i++) {
+            routeName = rule[_i];
+            if (!(routeName === name)) {
+              continue;
+            }
+            Pace.restart();
+            break;
+          }
+          return _results;
+        } else {
+          return Pace.restart();
+        }
+      });
+    }, 0);
   }
 
   SOURCE_KEYS = {
@@ -609,7 +651,9 @@
   } else if (typeof exports === 'object') {
     module.exports = Pace;
   } else {
-    Pace.start();
+    if (options.startOnPageLoad) {
+      Pace.start();
+    }
   }
 
 }).call(this);
